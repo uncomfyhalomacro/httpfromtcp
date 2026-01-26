@@ -1,8 +1,14 @@
+# 1. Ignore everything
 *
 
+# 2. Allow Git to look inside directories (crucial step)
+!*/
+
+# 3. Specifically allow these files
 !.gitignore
 !go.mod
 !go.sum
 !README.md
 !*.go
-!*/*.go
+!**/*.go
+
