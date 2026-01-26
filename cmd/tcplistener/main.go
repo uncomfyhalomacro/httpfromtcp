@@ -56,7 +56,7 @@ func main() {
 		defer conn.Close()
 		linesChan := getLinesChannel(conn)
 		for line := range linesChan {
-			fmt.Printf("read: %s\n", line)
+			fmt.Printf("%s\n", line)
 		}
 	}
 
