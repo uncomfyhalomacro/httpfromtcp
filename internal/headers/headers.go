@@ -104,6 +104,13 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, err
 	}
 
-	h[key] = value
+	oldValue, exists := h[key]
+	if exists {
+		newValue := oldValue + "," + value
+		h[key] = newValue
+	} else {
+		h[key] = value
+	}
+
 	return i + 2, false, nil
 }
