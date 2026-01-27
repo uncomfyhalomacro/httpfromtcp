@@ -62,10 +62,11 @@ func (s *Server) handle(conn net.Conn) {
 	if isServerConnected {
 		response := []byte(`HTTP/1.1 200 OK
 Content-Type: text/plain
-Content-Length: 13
 
-Hello World!`)
+Hello World!
+`)
 		conn.Write(response)
+		conn.Close()
 	} else {
 		conn.Close()
 	}
