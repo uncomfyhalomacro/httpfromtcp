@@ -3,6 +3,7 @@ package headers
 import (
 	"errors"
 	"fmt"
+	"log"
 	"slices"
 	"strings"
 )
@@ -91,11 +92,16 @@ func (h Headers) Get(key string) (value string) {
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
+	log.Printf("Parse called with: %q (%v)", data, []byte(data))
+	log.Printf("Parse called with: %q", data)
 	if len(data) == 0 {
 		return 0, false, nil
 	}
 
+	log.Printf("Parse called with: %q (%v)", data, []byte(data))
+
 	i := indexOfCRLF(data)
+	log.Printf("indexOfCRLF returned: %d", i)
 	if i == -1 {
 		return 0, false, nil
 	}

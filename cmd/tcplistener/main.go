@@ -21,12 +21,20 @@ func main() {
 			log.Fatalf("%v\n", err)
 		}
 		log.Println("Connection established!")
-		r, _ := request.RequestFromReader(conn)
-		fmt.Printf(`Request line:
-- Method: %s
-- Target: %s
-- Version: %s
-`, r.RequestLine.Method, r.RequestLine.RequestTarget, r.RequestLine.HttpVersion)
+		log.Println("About to read from conn")
+		req, err := request.RequestFromReader(conn)
+		log.Println("Finished read from conn")
+		if err != nil {
+			log.Fatalf("error parsing request: %s\n", err.Error())
+		}
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n", req.RequestLine.Method)
+		fmt.Printf("- Target: %s\n", req.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", req.RequestLine.HttpVersion)
+		fmt.Println("Headers:")
+		for key, value := range req.Headers {
+			fmt.Printf("- %s: %s\n", key, value)
+		}
 
 	}
 
