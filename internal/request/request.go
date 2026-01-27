@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/uncomfyhalomacro/httpfromtcp/internal/headers"
@@ -16,14 +17,23 @@ type requestLineState int
 
 const (
 	Initialized requestLineState = iota
-	Done
+	DoneRequestLine
+)
+
+type requestBodyState int
+
+const (
+	Reading requestBodyState = iota
+	DoneReadingBody
 )
 
 type Request struct {
 	RequestLine                RequestLine
-	RequestLineState           requestLineState
+	requestLineState           requestLineState
 	Headers                    headers.Headers
-	RequestStateParsingHeaders headers.HeaderState
+	requestStateParsingHeaders headers.HeaderState
+	Body                       []byte
+	requestBodyState           requestBodyState
 }
 
 type RequestLine struct {
@@ -115,7 +125,7 @@ func buildRequestLine(line string) (*RequestLine, error) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	switch r.RequestLineState {
+	switch r.requestLineState {
 	case Initialized:
 		n, err := parseRequestLine(data)
 		if err != nil {
@@ -131,13 +141,13 @@ func (r *Request) parse(data []byte) (int, error) {
 				return 0, err
 			}
 			r.RequestLine = *requestLine
-			r.RequestLineState = Done
+			r.requestLineState = DoneRequestLine
 			return n, nil
 		}
-	case Done:
+	case DoneRequestLine:
 		return 0, fmt.Errorf("trying to read data in a done state")
 	default:
-		return 0, fmt.Errorf("Unknown state: %v", r.RequestLineState)
+		return 0, fmt.Errorf("Unknown state: %v", r.requestLineState)
 	}
 	return 0, nil
 }
@@ -149,12 +159,14 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	var requestLine RequestLine
 	request := Request{
 		RequestLine:                requestLine,
-		RequestLineState:           Initialized,
+		requestLineState:           Initialized,
 		Headers:                    headers.Headers{},
-		RequestStateParsingHeaders: headers.ParsingHeaders,
+		requestStateParsingHeaders: headers.ParsingHeaders,
+		Body:                       []byte{},
+		requestBodyState:           Reading,
 	}
 
-	for request.RequestLineState != Done {
+	for request.requestLineState != DoneRequestLine {
 		if readToIndex == len(buf) {
 			newBuf := make([]byte, len(buf)*2)
 			copy(newBuf, buf[:readToIndex])
@@ -179,7 +191,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		totalBytesParsed += numBytesParsed
 	}
 
-	for request.RequestStateParsingHeaders != headers.Done {
+	for request.requestStateParsingHeaders != headers.Done {
 		if readToIndex == len(buf) {
 			newBuf := make([]byte, len(buf)*2)
 			copy(newBuf, buf[:readToIndex])
@@ -197,7 +209,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			return nil, err
 		}
 		if done {
-			request.RequestStateParsingHeaders = headers.Done
+			request.requestStateParsingHeaders = headers.Done
 		}
 		tbuf := make([]byte, readToIndex)
 		copy(tbuf, buf[numBytesParsed:readToIndex])
@@ -206,9 +218,44 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		totalBytesParsed += numBytesParsed
 	}
 
-	if request.RequestLineState != Done || request.RequestStateParsingHeaders != headers.Done {
+	if request.requestLineState != DoneRequestLine || request.requestStateParsingHeaders != headers.Done {
 		return nil, errors.New("request malformed: request has an incomplete state or invalid state")
 	}
 
-	return &request, nil
+	contentLength, exists := request.Headers.Get("content-length")
+	if !exists {
+		return &request, nil
+	}
+	bodyLength, err := strconv.Atoi(contentLength)
+	if err != nil {
+		return nil, fmt.Errorf("invalid content-length value: expecting a digit. %v", err)
+	}
+	actualLength := 0
+	for {
+		if readToIndex == len(buf) {
+			newBuf := make([]byte, len(buf)*2)
+			copy(newBuf, buf[:readToIndex])
+			buf = newBuf
+		}
+		numBytesRead, err := reader.Read(buf[readToIndex:])
+		actualLength += numBytesRead
+		if err == io.EOF {
+			actualLength += 1
+			break
+		} else if err != nil {
+			return nil, err
+		} else {
+			readToIndex += numBytesRead
+		}
+		tbuf := make([]byte, readToIndex)
+		copy(tbuf, buf[:readToIndex])
+		buf = tbuf
+	}
+	if bodyLength == actualLength {
+		request.requestBodyState = DoneReadingBody
+		request.Body = buf[:actualLength]
+		return &request, nil
+	} else {
+		return nil, fmt.Errorf("content length does not match with body: expected %v, got %v", bodyLength, actualLength)
+	}
 }

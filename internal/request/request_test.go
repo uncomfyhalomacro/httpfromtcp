@@ -66,16 +66,26 @@ func TestRequestWithHeaders(t *testing.T) {
 	r, err := RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
-	assert.Equal(t, "localhost:42069", r.Headers["host"])
-	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
-	assert.Equal(t, "*/*", r.Headers["accept"])
+
+	// Use .Get() and capture both return values
+	host, ok := r.Headers.Get("Host")
+	assert.True(t, ok)
+	assert.Equal(t, "localhost:42069", host)
+
+	ua, ok := r.Headers.Get("User-Agent")
+	assert.True(t, ok)
+	assert.Equal(t, "curl/7.81.0", ua)
+
+	accept, ok := r.Headers.Get("Accept")
+	assert.True(t, ok)
+	assert.Equal(t, "*/*", accept)
 
 	// Test: Malformed Header
 	reader = &chunkReader{
 		data:            "GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	r, err = RequestFromReader(reader)
+	_, err = RequestFromReader(reader)
 	require.Error(t, err)
 
 	// Test: Request with invalid characters in header
@@ -83,7 +93,7 @@ func TestRequestWithHeaders(t *testing.T) {
 		data:            "GET / HTTP/1.1\r\nHo⊎t: localhost:42069\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	r, err = RequestFromReader(reader)
+	_, err = RequestFromReader(reader)
 	require.Error(t, err)
 
 	// Test: Valid request with multiple headers of the same name
@@ -93,15 +103,10 @@ func TestRequestWithHeaders(t *testing.T) {
 	}
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
-	assert.Equal(t, "fire,water", r.Headers.Get("Set-Fav"))
 
-	// // Test: Missing CRLF
-	// reader = &chunkReader{
-	// 	data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\n",
-	// 	numBytesPerRead: 3,
-	// }
-	// r, err = RequestFromReader(reader)
-	// require.Error(t, err)
+	val, ok := r.Headers.Get("Set-Fav")
+	assert.True(t, ok)
+	assert.Equal(t, "fire,water", val)
 
 	// Test: Different headers but all valid
 	reader = &chunkReader{
@@ -110,6 +115,40 @@ func TestRequestWithHeaders(t *testing.T) {
 	}
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
-	assert.Equal(t, "fire", r.Headers.Get("Set-Fav"))
-	assert.Equal(t, "water", r.Headers.Get("Set-Wet"))
+
+	fav, ok := r.Headers.Get("Set-Fav")
+	assert.True(t, ok)
+	assert.Equal(t, "fire", fav)
+
+	wet, ok := r.Headers.Get("Set-Wet")
+	assert.True(t, ok)
+	assert.Equal(t, "water", wet)
+}
+
+func TestMoreRequestWithKnownHeaders(t *testing.T) {
+	// Test: Standard Body
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 13\r\n" +
+			"\r\n" +
+			"hello world!\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "hello world!\n", string(r.Body))
+
+	// Test: Body shorter than reported content length
+	reader = &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 20\r\n" +
+			"\r\n" +
+			"partial content",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
 }

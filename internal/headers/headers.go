@@ -86,8 +86,8 @@ func validAllowedCharsInHeader(s string) bool {
 	return true
 }
 
-func (h Headers) Get(key string) (value string) {
-	value = h[strings.ToLower(key)]
+func (h Headers) Get(key string) (value string, exists bool) {
+	value, exists = h[strings.ToLower(key)]
 	return
 }
 
