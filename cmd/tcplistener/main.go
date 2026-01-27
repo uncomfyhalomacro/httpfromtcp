@@ -2,42 +2,10 @@ package main
 
 import (
 	"fmt"
-	"io"
+	"github.com/uncomfyhalomacro/httpfromtcp/internal/request"
 	"log"
 	"net"
 )
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	ch := make(chan string)
-	go func() {
-		data := make([]byte, 8)
-		currentLine := ""
-		defer f.Close()
-		defer close(ch)
-		for {
-			n, err := f.Read(data)
-			if err == io.EOF {
-				break
-			}
-			start := 0
-			for i := 0; i < n; i++ {
-				if data[i] == '\n' {
-					part := string(data[start:i])
-					currentLine += part
-					ch <- currentLine
-					currentLine = ""
-					start = i + 1
-				}
-			}
-			lastPart := string(data[start:n])
-			currentLine += lastPart
-		}
-		if len(currentLine) > 0 {
-			ch <- currentLine
-		}
-	}()
-	return ch
-}
 
 func main() {
 	listener, err := net.Listen("tcp", "127.0.0.1:42069")
@@ -53,11 +21,13 @@ func main() {
 			log.Fatalf("%v\n", err)
 		}
 		log.Println("Connection established!")
-		defer conn.Close()
-		linesChan := getLinesChannel(conn)
-		for line := range linesChan {
-			fmt.Printf("%s\n", line)
-		}
+		r, _ := request.RequestFromReader(conn)
+		fmt.Printf(`Request line:
+- Method: %s
+- Target: %s
+- Version: %s
+`, r.RequestLine.Method, r.RequestLine.RequestTarget, r.RequestLine.HttpVersion)
+
 	}
 
 	// lines := getLinesChannel(f)
