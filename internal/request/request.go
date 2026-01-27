@@ -228,34 +228,35 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	}
 	bodyLength, err := strconv.Atoi(contentLength)
 	if err != nil {
-		return nil, fmt.Errorf("invalid content-length value: expecting a digit. %v", err)
+		return nil, fmt.Errorf("invalid content-length: %v", err)
 	}
-	actualLength := 0
-	for {
-		if readToIndex == len(buf) {
-			newBuf := make([]byte, len(buf)*2)
-			copy(newBuf, buf[:readToIndex])
-			buf = newBuf
+
+	request.Body = make([]byte, 0, bodyLength)
+	request.Body = append(request.Body, buf[:readToIndex]...)
+	actualLength := readToIndex
+
+	for actualLength < bodyLength {
+		// Use a temporary buffer for reading
+		tempBuf := make([]byte, bodyLength-actualLength)
+		numBytesRead, err := reader.Read(tempBuf)
+
+		if numBytesRead > 0 {
+			request.Body = append(request.Body, tempBuf[:numBytesRead]...)
+			actualLength += numBytesRead
 		}
-		numBytesRead, err := reader.Read(buf[readToIndex:])
-		actualLength += numBytesRead
+
 		if err == io.EOF {
-			actualLength += 1
 			break
-		} else if err != nil {
-			return nil, err
-		} else {
-			readToIndex += numBytesRead
 		}
-		tbuf := make([]byte, readToIndex)
-		copy(tbuf, buf[:readToIndex])
-		buf = tbuf
+		if err != nil {
+			return nil, err
+		}
 	}
-	if bodyLength == actualLength {
-		request.requestBodyState = DoneReadingBody
-		request.Body = buf[:actualLength]
-		return &request, nil
-	} else {
-		return nil, fmt.Errorf("content length does not match with body: expected %v, got %v", bodyLength, actualLength)
+
+	if bodyLength != actualLength {
+		return nil, fmt.Errorf("content length mismatch: expected %d, got %d", bodyLength, actualLength)
 	}
+
+	request.requestBodyState = DoneReadingBody
+	return &request, nil
 }

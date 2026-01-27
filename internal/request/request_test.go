@@ -133,7 +133,7 @@ func TestMoreRequestWithKnownHeaders(t *testing.T) {
 			"Content-Length: 13\r\n" +
 			"\r\n" +
 			"hello world!\n",
-		numBytesPerRead: 3,
+		numBytesPerRead: 4,
 	}
 	r, err := RequestFromReader(reader)
 	require.NoError(t, err)
@@ -151,4 +151,16 @@ func TestMoreRequestWithKnownHeaders(t *testing.T) {
 	}
 	r, err = RequestFromReader(reader)
 	require.Error(t, err)
+	// Test: Body as JSON
+	reader = &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 39\r\n" +
+			"\r\n" +
+			`{"type": "dark mode", "size": "medium"}`,
+		numBytesPerRead: 4,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+
 }
