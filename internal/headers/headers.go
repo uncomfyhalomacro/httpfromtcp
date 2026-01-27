@@ -2,6 +2,8 @@ package headers
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -53,7 +55,32 @@ func buildHeaderFrom(line []byte) (string, string, error) {
 	// Value may have optional whitespace around it
 	value := strings.TrimSpace(rawValue)
 
+	trimmedKey = strings.ToLower(trimmedKey)
+
+	if !validAllowedCharsInHeader(trimmedKey) {
+		return "", "", fmt.Errorf("invalid header name: header name contains not allowed or invalid characters. got `%v`", trimmedKey)
+	}
+
 	return trimmedKey, value, nil
+}
+
+func validAllowedCharsInHeader(s string) bool {
+	source := []rune(s)
+
+	const allowedChars = "abcdefghijklmnopqrstuvwxyz0123456789!#$%&'*+-.^_`|~"
+	runeArray := []rune(allowedChars)
+
+	for _, c := range source {
+		if !slices.Contains(runeArray, c) {
+			return false
+		}
+	}
+	return true
+}
+
+func (h Headers) Get(key string) (value string) {
+	value = h[strings.ToLower(key)]
+	return
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {

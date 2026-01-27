@@ -14,7 +14,7 @@ func TestHeaderParserReader(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers.Get("Host"))
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 
@@ -41,7 +41,7 @@ func TestHeaderParserReader(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 34, n)
 	assert.False(t, done)
-	assert.Equal(t, "\"application/json\"", headers["Content-Type"])
+	assert.Equal(t, "\"application/json\"", headers.Get("Content-Type"))
 	total := 0
 	for {
 		n, done, err = headers.Parse(data[total:])
@@ -51,8 +51,8 @@ func TestHeaderParserReader(t *testing.T) {
 			break
 		}
 	}
-	assert.Equal(t, "\"application/json\"", headers["Content-Type"])
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "\"application/json\"", headers.Get("Content-Type"))
+	assert.Equal(t, "localhost:42069", headers.Get("Host"))
 	assert.Equal(t, 73, total)
 	assert.True(t, done)
 
@@ -61,4 +61,11 @@ func TestHeaderParserReader(t *testing.T) {
 	data = []byte("Content Type: \"application/json\"\r\n       Host: localhost:42069       \r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.Error(t, err)
+
+	// Test: Invalid header with latex characters
+	headers = NewHeaders()
+	data = []byte("Co≆tent Type: \"application/json\"\r\n       Host: localhost:42069       \r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.Error(t, err)
+
 }
