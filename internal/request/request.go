@@ -1,24 +1,29 @@
 package request
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
+
+	"github.com/uncomfyhalomacro/httpfromtcp/internal/headers"
 )
 
 const bufferSize = 8
 
-type RequestState int
+type requestLineState int
 
 const (
-	Initialized RequestState = iota
+	Initialized requestLineState = iota
 	Done
 )
 
 type Request struct {
-	RequestLine  RequestLine
-	RequestState RequestState
+	RequestLine                RequestLine
+	RequestLineState           requestLineState
+	Headers                    headers.Headers
+	RequestStateParsingHeaders headers.HeaderState
 }
 
 type RequestLine struct {
@@ -110,7 +115,7 @@ func buildRequestLine(line string) (*RequestLine, error) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	switch r.RequestState {
+	switch r.RequestLineState {
 	case Initialized:
 		n, err := parseRequestLine(data)
 		if err != nil {
@@ -126,13 +131,13 @@ func (r *Request) parse(data []byte) (int, error) {
 				return 0, err
 			}
 			r.RequestLine = *requestLine
-			r.RequestState = Done
+			r.RequestLineState = Done
 			return n, nil
 		}
 	case Done:
 		return 0, fmt.Errorf("trying to read data in a done state")
 	default:
-		return 0, fmt.Errorf("Unknown state: %v", r.RequestState)
+		return 0, fmt.Errorf("Unknown state: %v", r.RequestLineState)
 	}
 	return 0, nil
 }
@@ -140,38 +145,71 @@ func (r *Request) parse(data []byte) (int, error) {
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, bufferSize)
 	readToIndex := 0
+	totalBytesParsed := 0
 	var requestLine RequestLine
 	request := Request{
-		RequestLine:  requestLine,
-		RequestState: Initialized,
+		RequestLine:                requestLine,
+		RequestLineState:           Initialized,
+		Headers:                    headers.Headers{},
+		RequestStateParsingHeaders: headers.ParsingHeaders,
 	}
-	for {
-		if request.RequestState == Done {
+
+	for request.RequestLineState != Done {
+		if readToIndex == len(buf) {
+			newBuf := make([]byte, len(buf)*2)
+			copy(newBuf, buf[:readToIndex])
+			buf = newBuf
+		}
+		numBytesRead, err := reader.Read(buf[readToIndex:])
+		if err == io.EOF {
 			break
 		}
-		if request.RequestState == Initialized {
-			if readToIndex == len(buf) {
-				newBuf := make([]byte, len(buf)*2)
-				copy(newBuf, buf[:readToIndex])
-				buf = newBuf
-			}
-			numBytesRead, err := reader.Read(buf[readToIndex:])
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-			readToIndex += numBytesRead
-			numBytesParsed, err := request.parse(buf[:readToIndex])
-			if err != nil {
-				return nil, err
-			}
-			tbuf := make([]byte, readToIndex)
-			copy(tbuf, buf[numBytesParsed:readToIndex])
-			buf = tbuf
-			readToIndex -= numBytesParsed
+		if err != nil {
+			return nil, err
 		}
+		readToIndex += numBytesRead
+		numBytesParsed, err := request.parse(buf[:readToIndex])
+		if err != nil {
+			return nil, err
+		}
+		tbuf := make([]byte, readToIndex)
+		copy(tbuf, buf[numBytesParsed:readToIndex])
+		buf = tbuf
+		readToIndex -= numBytesParsed
+		totalBytesParsed += numBytesParsed
 	}
+
+	for request.RequestStateParsingHeaders != headers.Done {
+		if readToIndex == len(buf) {
+			newBuf := make([]byte, len(buf)*2)
+			copy(newBuf, buf[:readToIndex])
+			buf = newBuf
+		}
+		numBytesRead, err := reader.Read(buf[readToIndex:])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		readToIndex += numBytesRead
+		numBytesParsed, done, err := request.Headers.Parse(buf[:readToIndex])
+		if err != nil {
+			return nil, err
+		}
+		if done {
+			request.RequestStateParsingHeaders = headers.Done
+		}
+		tbuf := make([]byte, readToIndex)
+		copy(tbuf, buf[numBytesParsed:readToIndex])
+		buf = tbuf
+		readToIndex -= numBytesParsed
+		totalBytesParsed += numBytesParsed
+	}
+
+	if request.RequestLineState != Done || request.RequestStateParsingHeaders != headers.Done {
+		return nil, errors.New("request malformed: request has an incomplete state or invalid state")
+	}
+
 	return &request, nil
 }

@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+type HeaderState int
+
+const (
+	ParsingHeaders HeaderState = iota
+	Done
+)
+
 type Headers map[string]string
 
 func NewHeaders() Headers {
