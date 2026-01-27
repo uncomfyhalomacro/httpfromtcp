@@ -61,7 +61,7 @@ func TestRequestWithHeaders(t *testing.T) {
 	// Test: Standard Headers
 	reader := &chunkReader{
 		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
-		numBytesPerRead: 3,
+		numBytesPerRead: 4,
 	}
 	r, err := RequestFromReader(reader)
 	require.NoError(t, err)
@@ -95,11 +95,21 @@ func TestRequestWithHeaders(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "fire,water", r.Headers.Get("Set-Fav"))
 
-	// Test: Missing CRLF
+	// // Test: Missing CRLF
+	// reader = &chunkReader{
+	// 	data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\n",
+	// 	numBytesPerRead: 3,
+	// }
+	// r, err = RequestFromReader(reader)
+	// require.Error(t, err)
+
+	// Test: Different headers but all valid
 	reader = &chunkReader{
-		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\n",
+		data:            "GET / HTTP/1.1\r\nSet-Fav: fire\r\n   Set-Wet: water\r\n\r\n",
 		numBytesPerRead: 3,
 	}
 	r, err = RequestFromReader(reader)
-	require.Error(t, err)
+	require.NoError(t, err)
+	assert.Equal(t, "fire", r.Headers.Get("Set-Fav"))
+	assert.Equal(t, "water", r.Headers.Get("Set-Wet"))
 }

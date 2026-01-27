@@ -187,12 +187,11 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 		numBytesRead, err := reader.Read(buf[readToIndex:])
 		if err == io.EOF {
-			break
-		}
-		if err != nil {
+		} else if err != nil {
 			return nil, err
+		} else {
+			readToIndex += numBytesRead
 		}
-		readToIndex += numBytesRead
 		numBytesParsed, done, err := request.Headers.Parse(buf[:readToIndex])
 		if err != nil {
 			return nil, err
