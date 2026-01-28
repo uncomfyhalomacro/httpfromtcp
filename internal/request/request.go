@@ -192,10 +192,23 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	}
 
 	for request.requestStateParsingHeaders != headers.Done {
+		numBytesParsed, done, err := request.Headers.Parse(buf[:readToIndex])
+		if err != nil {
+			return nil, err
+		}
+		if done {
+			request.requestStateParsingHeaders = headers.Done
+		}
 		if readToIndex == len(buf) {
 			newBuf := make([]byte, len(buf)*2)
 			copy(newBuf, buf[:readToIndex])
 			buf = newBuf
+		}
+		if numBytesParsed > 0 {
+			copy(buf, buf[numBytesParsed:readToIndex])
+			readToIndex -= numBytesParsed
+			totalBytesParsed += numBytesParsed
+			continue
 		}
 		numBytesRead, err := reader.Read(buf[readToIndex:])
 		if err == io.EOF {
@@ -204,18 +217,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		} else {
 			readToIndex += numBytesRead
 		}
-		numBytesParsed, done, err := request.Headers.Parse(buf[:readToIndex])
-		if err != nil {
-			return nil, err
-		}
-		if done {
-			request.requestStateParsingHeaders = headers.Done
-		}
-		tbuf := make([]byte, readToIndex)
-		copy(tbuf, buf[numBytesParsed:readToIndex])
-		buf = tbuf
-		readToIndex -= numBytesParsed
-		totalBytesParsed += numBytesParsed
 	}
 
 	if request.requestLineState != DoneRequestLine || request.requestStateParsingHeaders != headers.Done {

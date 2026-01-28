@@ -133,7 +133,7 @@ func TestMoreRequestWithKnownHeaders(t *testing.T) {
 			"Content-Length: 13\r\n" +
 			"\r\n" +
 			"hello world!\n",
-		numBytesPerRead: 4,
+		numBytesPerRead: 5,
 	}
 	r, err := RequestFromReader(reader)
 	require.NoError(t, err)

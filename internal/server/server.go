@@ -5,6 +5,9 @@ import (
 	"log"
 	"net"
 	"sync/atomic"
+
+	"github.com/uncomfyhalomacro/httpfromtcp/internal/request"
+	"github.com/uncomfyhalomacro/httpfromtcp/internal/response"
 )
 
 type Server struct {
@@ -13,9 +16,10 @@ type Server struct {
 	listener   net.Listener
 	connection net.Conn
 	connected  atomic.Bool
+	handler    func(target string) Handler
 }
 
-func Serve(addr string, port int) (*Server, error) {
+func Serve(addr string, port int, handler func(target string) Handler) (*Server, error) {
 	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
 	if err != nil {
 		return nil, err
@@ -26,6 +30,7 @@ func Serve(addr string, port int) (*Server, error) {
 		listener:   l,
 		connection: nil,
 		connected:  atomic.Bool{},
+		handler:    handler,
 	}
 	go server.listen()
 	return &server, nil
@@ -60,12 +65,21 @@ func (s *Server) listen() {
 func (s *Server) handle(conn net.Conn) {
 	isServerConnected := s.connected.Load()
 	if isServerConnected {
-		response := []byte(`HTTP/1.1 200 OK
-Content-Type: text/plain
-
-Hello World!
-`)
-		conn.Write(response)
+		h := response.GetDefaultHeaders(0)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			response.WriteStatusLine(conn, response.BadRequest)
+			response.WriteHeaders(conn, h)
+			conn.Write([]byte("Woopsie, my bad\n"))
+			conn.Close()
+		}
+		hErr := s.handler(req.RequestLine.RequestTarget)(conn, req)
+		if hErr != nil {
+			response.WriteStatusLine(conn, response.StatusCode(hErr.StatusCode))
+			hlen := len(hErr.Message)
+			h["content-length"] = fmt.Sprintf("%d", hlen)
+			response.WriteHeaders(conn, h)
+		}
 		conn.Close()
 	} else {
 		conn.Close()
