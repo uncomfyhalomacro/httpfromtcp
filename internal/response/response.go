@@ -85,3 +85,24 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 	}
 	return n, nil
 }
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	n, err := w.F.Write(p)
+	return n, err
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	n, err := w.F.Write([]byte("0\r\n"))
+	return n, err
+}
+
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	allHeaders := ""
+	for key, val := range h {
+		headerLine := fmt.Sprintf("%s: %s\r\n", key, val)
+		allHeaders += headerLine
+	}
+	_, err := w.F.Write([]byte(allHeaders))
+	w.F.Write([]byte("\r\n"))
+	return err
+}
