@@ -65,21 +65,16 @@ func (s *Server) listen() {
 func (s *Server) handle(conn net.Conn) {
 	isServerConnected := s.connected.Load()
 	if isServerConnected {
-		h := response.GetDefaultHeaders(0)
 		req, err := request.RequestFromReader(conn)
+		resp := response.Writer{
+			F: conn,
+		}
+
 		if err != nil {
-			response.WriteStatusLine(conn, response.BadRequest)
-			response.WriteHeaders(conn, h)
-			conn.Write([]byte("Woopsie, my bad\n"))
+			s.handler(req.RequestLine.RequestTarget)(&resp, req)
 			conn.Close()
 		}
-		hErr := s.handler(req.RequestLine.RequestTarget)(conn, req)
-		if hErr != nil {
-			response.WriteStatusLine(conn, response.StatusCode(hErr.StatusCode))
-			hlen := len(hErr.Message)
-			h["content-length"] = fmt.Sprintf("%d", hlen)
-			response.WriteHeaders(conn, h)
-		}
+		s.handler(req.RequestLine.RequestTarget)(&resp, req)
 		conn.Close()
 	} else {
 		conn.Close()

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -15,50 +13,73 @@ import (
 
 const port = 42069
 
-func CheckPath(p string) server.Handler {
-	msg := "All good, frfr\n"
+func handler(cT string) func(p string) server.Handler {
+	return func(p string) server.Handler {
+		msg := `<html>
+  <head>
+    <title>200 OK</title>
+  </head>
+  <body>
+    <h1>Success!</h1>
+    <p>Your request was an absolute banger.</p>
+  </body>
+</html>`
 
-	statusCode := response.Ok
-	if p == "/yourproblem" {
-		msg = "Your problem is not my problem\n"
-		statusCode = response.BadRequest
+		statusCode := response.Ok
+		if p == "/yourproblem" {
+			msg = `<html>
+  <head>
+    <title>400 Bad Request</title>
+  </head>
+  <body>
+    <h1>Bad Request</h1>
+    <p>Your request honestly kinda sucked.</p>
+  </body>
+</html>`
+			statusCode = response.BadRequest
 
-	}
-	if p == "/myproblem" {
-		msg = "Woopsie, my bad\n"
-		statusCode = response.InternalServerError
-	}
+		}
+		if p == "/myproblem" {
+			msg = `<html>
+  <head>
+    <title>500 Internal Server Error</title>
+  </head>
+  <body>
+    <h1>Internal Server Error</h1>
+    <p>Okay, you know what? This one is on me.</p>
+  </body>
+</html>`
+			statusCode = response.InternalServerError
+		}
 
-	return func(w io.Writer, r *request.Request) *server.HandlerError {
-		msgBytes := []byte(msg)
-		h := response.GetDefaultHeaders(len(msgBytes))
-		err := response.WriteStatusLine(w, statusCode)
-		if err != nil {
-			return &server.HandlerError{
-				StatusCode: 500,
-				Message:    fmt.Sprintf("%v", err),
+		return func(w *response.Writer, r *request.Request) {
+			msgBytes := []byte(msg)
+			h := response.GetDefaultHeaders(len(msgBytes))
+			h["content-type"] = cT
+			err := w.WriteStatusLine(statusCode)
+			if err != nil {
+				h = response.GetDefaultHeaders(0)
+				w.WriteStatusLine(response.InternalServerError)
+				w.WriteHeaders(h)
+			}
+			err = w.WriteHeaders(h)
+			if err != nil {
+				h = response.GetDefaultHeaders(0)
+				w.WriteStatusLine(response.InternalServerError)
+				w.WriteHeaders(h)
+			}
+			_, err = w.WriteBody(msgBytes)
+			if err != nil {
+				h = response.GetDefaultHeaders(0)
+				w.WriteStatusLine(response.InternalServerError)
+				w.WriteHeaders(h)
 			}
 		}
-		err = response.WriteHeaders(w, h)
-		if err != nil {
-			return &server.HandlerError{
-				StatusCode: 500,
-				Message:    fmt.Sprintf("%v", err),
-			}
-		}
-		_, err = w.Write(msgBytes)
-		if err != nil {
-			return &server.HandlerError{
-				StatusCode: 500,
-				Message:    fmt.Sprintf("%v", err),
-			}
-		}
-		return nil
 	}
 }
 
 func main() {
-	server, err := server.Serve("", port, CheckPath)
+	server, err := server.Serve("", port, handler("text/html"))
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}

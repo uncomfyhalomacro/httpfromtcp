@@ -15,7 +15,24 @@ const (
 	InternalServerError StatusCode = 500
 )
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+type WriterState int
+
+const (
+	InitializedWriter WriterState = iota
+	StatusLineDone
+	HeadersDone
+	BodyDone
+)
+
+type Writer struct {
+	writerState WriterState
+	F           io.WriteCloser
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.writerState != InitializedWriter {
+		return fmt.Errorf("status line should be written first")
+	}
 	statusLine := ""
 	switch statusCode {
 	case Ok:
@@ -28,25 +45,43 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 		statusLine = ""
 	}
 	statusLine += "\r\n"
-	_, err := w.Write([]byte(statusLine))
+	_, err := w.F.Write([]byte(statusLine))
+	w.writerState = StatusLineDone
 	return err
 }
 
 func GetDefaultHeaders(contentLen int) headers.Headers {
 	h := headers.NewHeaders()
-	h["content-length"] = fmt.Sprintf("%d", contentLen) 
+	h["content-length"] = fmt.Sprintf("%d", contentLen)
 	h["connection"] = "close"
 	h["content-type"] = "text/plain"
 	return h
 }
 
-func WriteHeaders(w io.Writer, h headers.Headers) error {
+func (w *Writer) WriteHeaders(h headers.Headers) error {
+	if w.writerState != StatusLineDone {
+		return fmt.Errorf("status line should be written first before headers")
+	}
+
 	allHeaders := ""
 	for key, val := range h {
 		headerLine := fmt.Sprintf("%s: %s\r\n", key, val)
 		allHeaders += headerLine
 	}
 	allHeaders += "\r\n"
-	_, err := w.Write([]byte(allHeaders))
+	_, err := w.F.Write([]byte(allHeaders))
+	w.writerState = HeadersDone
 	return err
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.writerState != HeadersDone {
+		return 0, fmt.Errorf("headers should be written first before request body")
+	}
+	n, err := w.F.Write(p)
+	w.writerState = BodyDone
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }

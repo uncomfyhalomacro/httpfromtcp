@@ -1,14 +1,8 @@
 package server
 
 import (
-	"io"
-
 	"github.com/uncomfyhalomacro/httpfromtcp/internal/request"
+	"github.com/uncomfyhalomacro/httpfromtcp/internal/response"
 )
 
-type HandlerError struct {
-    StatusCode int
-    Message string
-}
-
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request)
